@@ -28,6 +28,28 @@ const (
 	r2r_version = '0.2'
 )
 
+// ///////////////
+struct R2r {
+mut:
+	r2          &r2.R2
+	cmd_tests   []R2rCmdTest
+	asm_tests   []R2rAsmTest
+	targets     []string
+	jobs        int
+	timeout     int
+	wg          &sync.WaitGroup
+	success     int
+	failed      int
+	fixed       int
+	broken      int
+	db_path     string
+	r2_path     string
+	show_quiet  bool
+	interactive bool
+	r2r_home    string
+	filter_by_files []string
+}
+
 fn autodetect_dbpath() string {
 	return os.join_path(r2r_home(),default_dbpath)
 }
@@ -43,7 +65,7 @@ fn control_c() {
 }
 
 pub fn main() {
-	mut r2r := R2R{}
+	mut r2r := R2r{}
 	mut fp := flag.new_flag_parser(os.args)
 	fp.application(os.file_name(os.executable()))
 	// fp.version(r2r_version)
@@ -112,7 +134,7 @@ pub fn main() {
 	exit(rc)
 }
 
-fn (r2r mut R2R) run_tests() {
+fn (r2r mut R2r) run_tests() {
 	if r2r.wants('json') {
 		r2r.run_jsn_tests()
 	}
@@ -141,36 +163,15 @@ fn mktmpdir(template string) string {
 	return tos_clone(res)
 }
 
-// ///////////////
-struct R2R {
-mut:
-	cmd_tests   []R2RCmdTest
-	asm_tests   []R2RAsmTest
-	targets     []string
-	r2          &r2.R2
-	jobs        int
-	timeout     int
-	wg          &sync.WaitGroup
-	success     int
-	failed      int
-	fixed       int
-	broken      int
-	db_path     string
-	r2_path     string
-	show_quiet  bool
-	interactive bool
-	r2r_home    string
-	filter_by_files []string
-}
 
-fn (r2r R2R)return_code() int {
+fn (r2r R2r)return_code() int {
 	if r2r.failed == 0 {
 		return 0
 	}
 	return 1
 }
 
-struct R2RCmdTest {
+struct R2rCmdTest {
 mut:
 	name       string
 	file       string
@@ -185,7 +186,7 @@ mut:
 	fixed      bool
 }
 
-struct R2RAsmTest {
+struct R2rAsmTest {
 mut:
 	arch string
 	bits int
@@ -203,7 +204,7 @@ mut:
 	name string
 }
 
-fn (test R2RCmdTest) parse_slurp(v string) (string,string) {
+fn (test R2rCmdTest) parse_slurp(v string) (string,string) {
 	mut res := ''
 	mut slurp_token := ''
 	if v.starts_with("'") || v.starts_with("'") {
@@ -221,11 +222,11 @@ fn (test R2RCmdTest) parse_slurp(v string) (string,string) {
 	return res,slurp_token
 }
 
-fn (r2r mut R2R) load_cmd_test(testfile string) {
+fn (r2r mut R2r) load_cmd_test(testfile string) {
 	if r2r.filtered_file(testfile) {
 		return
 	}
-	mut test := R2RCmdTest{}
+	mut test := R2rCmdTest{}
 	lines := os.read_lines(testfile) or {
 		panic(err)
 	}
@@ -339,7 +340,7 @@ fn (r2r mut R2R) load_cmd_test(testfile string) {
 						}
 						r2r.cmd_tests << test
 					}
-					test = R2RCmdTest{}
+					test = R2rCmdTest{}
 					test.source = testfile
 				}
 			}
@@ -351,7 +352,7 @@ fn (r2r mut R2R) load_cmd_test(testfile string) {
 /*
 // only useful for r2pipe mode, right now we do plain spawns with pipes
 
-fn (r2r R2R)run_commands(test R2RCmdTest) string {
+fn (r2r R2r)run_commands(test R2rCmdTest) string {
 	res := ''
 	for cmd in cmds {
 		if isnil(cmd) {
@@ -363,7 +364,7 @@ fn (r2r R2R)run_commands(test R2RCmdTest) string {
 }
 */
 
-fn (r2r mut R2R) test_failed(test R2RCmdTest, a string, b string) string {
+fn (r2r mut R2r) test_failed(test R2rCmdTest, a string, b string) string {
 	if test.broken {
 		r2r.broken++
 		return term.blue('BR')
@@ -377,7 +378,7 @@ fn (r2r mut R2R) test_failed(test R2RCmdTest, a string, b string) string {
 	return term.red('XX')
 }
 
-fn (r2r R2R) wants(s string) bool {
+fn (r2r R2r) wants(s string) bool {
 	// eprintln('want ${s}')
 	if s.contains('/') {
 		return true
@@ -388,7 +389,7 @@ fn (r2r R2R) wants(s string) bool {
 	return r2r.targets.index(s) != -1
 }
 
-fn (r2r R2R) wants_any_cmd_tests() bool {
+fn (r2r R2r) wants_any_cmd_tests() bool {
 	if r2r.filter_by_files.len > 0 {
 		return true
 	}
@@ -403,12 +404,12 @@ fn (r2r R2R) wants_any_cmd_tests() bool {
 	return false
 }
 
-fn (r2r mut R2R) test_fixed(test R2RCmdTest) string {
+fn (r2r mut R2r) test_fixed(test R2rCmdTest) string {
 	r2r.fixed++
 	return term.yellow('FX')
 }
 
-fn (r2r mut R2R) run_asm_test_native(test R2RAsmTest, dismode bool) {
+fn (r2r mut R2r) run_asm_test_native(test R2rAsmTest, dismode bool) {
 	r2r.r2.break_begin()
 	test_expect := if dismode { test.inst.trim_space() } else { test.data.trim_space() }
 	time_start := time.ticks()
@@ -460,7 +461,7 @@ fn (r2r mut R2R) run_asm_test_native(test R2RAsmTest, dismode bool) {
 	r2r.wg.done()
 }
 
-fn (r2r mut R2R) run_asm_test(test R2RAsmTest, dismode bool) {
+fn (r2r mut R2r) run_asm_test(test R2rAsmTest, dismode bool) {
 	if !isnil(r2r.r2) {
 		r2r.run_asm_test_native(test, dismode)
 		return
@@ -524,7 +525,7 @@ fn handle_control_c() {
 	}
 }
 
-fn (r2r mut R2R) run_cmd_test(test R2RCmdTest) {
+fn (r2r mut R2r) run_cmd_test(test R2rCmdTest) {
 	time_start := time.ticks()
 	tmp_dir := mktmpdir('')
 	tmp_script := os.join_path(tmp_dir,'script.r2')
@@ -571,7 +572,7 @@ fn (r2r mut R2R) run_cmd_test(test R2RCmdTest) {
 	r2r.wg.done()
 }
 
-fn (r2r mut R2R) run_fuz_test(ff string, pc int) bool {
+fn (r2r mut R2r) run_fuz_test(ff string, pc int) bool {
 	handle_control_c()
 	cmd := 'rarun2 timeout=${default_timeout} system="${r2r.r2_path} -qq -A -n ${ff}"'
 	res := os.system(cmd) == 0
@@ -590,11 +591,11 @@ fn (r2r mut R2R) run_fuz_test(ff string, pc int) bool {
 	return res
 }
 
-fn (r2r R2R) git_clone(ghpath, localpath string) {
+fn (r2r R2r) git_clone(ghpath, localpath string) {
 	os.system('cd ${r2r.db_path}/.. ; git clone --depth 1 https://github.com/${ghpath} ${localpath}')
 }
 
-fn (r2r mut R2R) run_fuz_tests() {
+fn (r2r mut R2r) run_fuz_tests() {
 	home := r2r_home()
 	fuzz_path := '${home}/bins/fuzzed'
 	r2r.wg = sync.new_waitgroup()
@@ -626,7 +627,7 @@ fn (r2r mut R2R) run_fuz_tests() {
 	r2r.wg.wait()
 }
 
-fn (r2r mut R2R) load_asm_test(testfile string) {
+fn (r2r mut R2r) load_asm_test(testfile string) {
 	lines := os.read_lines(testfile) or {
 		panic(err)
 	}
@@ -636,7 +637,7 @@ fn (r2r mut R2R) load_asm_test(testfile string) {
 		}
 		words := line.split('"')
 		if words.len == 3 {
-			mut at := R2RAsmTest{}
+			mut at := R2rAsmTest{}
 			at.mode = words[0].trim_space()
 			at.inst = words[1].trim_space()
 			data := words[2].trim_space()
@@ -678,7 +679,7 @@ fn (r2r mut R2R) load_asm_test(testfile string) {
 	}
 }
 
-fn (r2r mut R2R) load_asm_tests(testpath string) {
+fn (r2r mut R2r) load_asm_tests(testpath string) {
 	r2r.wg = sync.new_waitgroup()
 	files := os.ls(testpath) or {
 		panic(err)
@@ -698,7 +699,7 @@ fn (r2r mut R2R) load_asm_tests(testpath string) {
 	r2r.wg.wait()
 }
 
-fn (r2r mut R2R) run_unit_tests() bool {
+fn (r2r mut R2r) run_unit_tests() bool {
 	wd := os.getwd()
 	_ = os.system('make -C ${r2r.r2r_home}/unit') // TODO: rewrite in V instead of depending on a makefile
 	unit_path := '${r2r.db_path}/../../unit/bin'
@@ -739,7 +740,7 @@ fn is_executable(abspath, filename string) bool {
 	return os.is_executable(abspath)
 }
 
-fn (r2r mut R2R) run_asm_tests() {
+fn (r2r mut R2r) run_asm_tests() {
 	mut c := r2r.jobs
 	r2r.r2 = r2.new()
 	// assemble/disassemble and compare
@@ -780,7 +781,7 @@ fn (r2r mut R2R) run_asm_tests() {
 	r2r.wg.wait()
 }
 
-fn (r2r mut R2R) run_jsn_tests() {
+fn (r2r mut R2r) run_jsn_tests() {
 	json_path := '${r2r.db_path}/json'
 	files := os.ls(json_path) or {
 		panic(err)
@@ -816,7 +817,7 @@ fn (r2r mut R2R) run_jsn_tests() {
 	}
 }
 
-fn (r2r R2R)filtered_file(file string) bool {
+fn (r2r R2r)filtered_file(file string) bool {
 	if r2r.filter_by_files.len == 0 {
 		return false
 	}
@@ -828,7 +829,7 @@ fn (r2r R2R)filtered_file(file string) bool {
 	return true
 }
 
-fn (r2r mut R2R) run_cmd_tests() {
+fn (r2r mut R2r) run_cmd_tests() {
 	println('[r2r] Running cmd tests')
 	// r2r.r2 = r2.new()
 	// TODO: use lock
@@ -854,7 +855,7 @@ fn (r2r mut R2R) run_cmd_tests() {
 	r2r.wg.wait()
 }
 
-fn (r2r R2R) show_report() {
+fn (r2r R2r) show_report() {
 	total := r2r.broken + r2r.fixed + r2r.failed + r2r.success
 	println('')
 	println(' Broken: ${r2r.broken}')
@@ -864,7 +865,7 @@ fn (r2r R2R) show_report() {
 	println('  Total: ${total}')
 }
 
-fn (r2r mut R2R) load_cmd_tests(testpath string) {
+fn (r2r mut R2r) load_cmd_tests(testpath string) {
 	files := os.ls(testpath) or {
 		panic(err)
 	}
@@ -886,7 +887,7 @@ struct DummyStruct {
 	no string
 }
 
-fn (r2r mut R2R) run_jsn_test(cmd string) bool {
+fn (r2r mut R2r) run_jsn_test(cmd string) bool {
 	if isnil(r2r.r2) {
 		r2r.r2 = r2.new()
 		// _ = r2r.r2.cmd('o /bin/ls')
@@ -896,7 +897,7 @@ fn (r2r mut R2R) run_jsn_test(cmd string) bool {
 		return true
 	}
 	// verify json
-	_ = json.decode(DummyStruct,jsonstr) or {
+	_ = json.decode(DummyStruct, jsonstr) or {
 		eprintln('[r2r] json ${cmd} = ${jsonstr}')
 		return false
 	}
@@ -904,12 +905,12 @@ fn (r2r mut R2R) run_jsn_test(cmd string) bool {
 	// return os.system("echo '${jsonstr}' | jq . > /dev/null") == 0
 }
 
-fn (r2r R2R) load_jsn_tests(testpath string) {
+fn (r2r R2r) load_jsn_tests(testpath string) {
 	// implementation is in run_jsn_tests
 	// nothing to load for now
 }
 
-fn (r2r mut R2R) load_tests() {
+fn (r2r mut R2r) load_tests() {
 	r2r.cmd_tests = []
 	if !os.is_dir(r2r.db_path) {
 		eprintln('Cannot open -d ${r2r.db_path}')
