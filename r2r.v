@@ -65,7 +65,7 @@ fn control_c() {
 }
 
 pub fn main() {
-	mut r2r := R2r{}
+	mut r2r := R2r{r2:0, wg:0}
 	mut fp := flag.new_flag_parser(os.args)
 	fp.application(os.file_name(os.executable()))
 	// fp.version(r2r_version)
