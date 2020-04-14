@@ -897,12 +897,14 @@ fn (r2r mut R2r) run_jsn_test(cmd string) bool {
 		return true
 	}
 	// verify json
+/*
 	_ = json.decode(DummyStruct, jsonstr) or {
 		eprintln('[r2r] json ${cmd} = ${jsonstr}')
 		return false
 	}
 	return true
-	// return os.system("echo '${jsonstr}' | jq . > /dev/null") == 0
+*/
+	return os.system("echo '${jsonstr}' | jq . > /dev/null") == 0
 }
 
 fn (r2r R2r) load_jsn_tests(testpath string) {
